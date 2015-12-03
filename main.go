@@ -48,6 +48,7 @@ func main() {
 	// inject to the stream handler function through a closure the configuration and the current user.
 	f.HandleFunc("/{id}", streamHandler(conf, currentUser)).Name("file")
 
+
 	// construct the array of files which we can serve from.
 	files := make([]string, 0)
 	err = filepath.Walk(servingDir, func(path string, info os.FileInfo, err error) error {
@@ -115,20 +116,6 @@ func streamHandler(conf config, current *user.User) http.HandlerFunc {
 		io.Copy(w, file)
 	})
 }
-
-/*
-func showFilesHandler(fullpath string) http.HandlerFunc {
-	return http.HandlerFunc(func (w http.ResponseWriter, r *http.Request) {
-		err := filepath.Walk(fullpath, func(path string, info os.FileInfo, err error) error {
-			fmt.Fprintf(w, "%s\n", path)
-			return nil
-		})
-		if err != nil {
-			fmt.Printf("[ERROR] %v", err)
-		}
-	})
-}
-*/
 
 func homeHandler(renderer *render.Render, data HomeDisplay) http.HandlerFunc {
 	return http.HandlerFunc(func (w http.ResponseWriter, r *http.Request) {

@@ -1,23 +1,5 @@
 package main
 
-/*
-  TODO: improve
-  Make some more routing so we can see all the files and some pretty thumbnails.
-
-  Basically, a route that makes an "ls" on the directory and returns some links to those files.
-  These links can be constructed to point at the web application itself.
-  For instance:
-
-
-   - foo.png[/streamr/foo.png]
-   - test.txt[/streamr/test.txt]
-
-  Make some html template for this.
-
-  TODO: Make those templates with go-bindata so we don't have to manage this on deploy.
-  How far can we push this web application?
-*/
-
 import (
 	"fmt"
 	"github.com/codegangsta/negroni"
@@ -29,6 +11,7 @@ import (
 	"io"
 	"encoding/json"
 	"path/filepath"
+	"github.com/unrolled/render"
 )
 
 
@@ -37,10 +20,14 @@ type config struct {
 	LookupDir string `json:"directory"`
 }
 
+type HomeDisplay struct {
+	User, Title, ServingDir string
+	Files []string
+}
+
 func main() {
 	// get a router, with a default home handler
 	r := mux.NewRouter()
-	r.HandleFunc("/", homeHandler)
 
 	// read the configuration from the file in the directory
 	conf := readConfig()
@@ -51,12 +38,42 @@ func main() {
 		panic(err)
 	}
 
+	// the dir on which we are serving
+	servingDir := path.Join(currentUser.HomeDir, conf.LookupDir)
+
+
 	// find a file by name, on the /streamr/{id} URL
 	f := r.PathPrefix("/streamr").Subrouter()
 
 	// inject to the stream handler function through a closure the configuration and the current user.
-	f.HandleFunc("/{id}", streamHandler(conf, currentUser))
-	f.HandleFunc("/", showFilesHandler(path.Join(currentUser.HomeDir, conf.LookupDir)))
+	f.HandleFunc("/{id}", streamHandler(conf, currentUser)).Name("file")
+
+	// construct the array of files which we can serve from.
+	files := make([]string, 0)
+	err = filepath.Walk(servingDir, func(path string, info os.FileInfo, err error) error {
+		if err == nil {
+			if servingDir != path {
+				url, err := r.Get("file").URL("id", filepath.Base(path))
+				if err != nil {
+					return err
+				}
+				files = append(files, url.String())
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	r.HandleFunc("/", homeHandler(render.New(), HomeDisplay{
+		Title: "Streamr",
+		User: currentUser.Name,
+		ServingDir: servingDir,
+		Files: files,
+	}))
+
 
 	// start negroni
 	n := negroni.Classic()
@@ -99,6 +116,7 @@ func streamHandler(conf config, current *user.User) http.HandlerFunc {
 	})
 }
 
+/*
 func showFilesHandler(fullpath string) http.HandlerFunc {
 	return http.HandlerFunc(func (w http.ResponseWriter, r *http.Request) {
 		err := filepath.Walk(fullpath, func(path string, info os.FileInfo, err error) error {
@@ -110,9 +128,10 @@ func showFilesHandler(fullpath string) http.HandlerFunc {
 		}
 	})
 }
+*/
 
-// print something nice.
-// TODO: templates!
-func homeHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "hello, home!")
+func homeHandler(renderer *render.Render, data HomeDisplay) http.HandlerFunc {
+	return http.HandlerFunc(func (w http.ResponseWriter, r *http.Request) {
+		renderer.HTML(w, http.StatusOK, "home-template", data)
+	})
 }

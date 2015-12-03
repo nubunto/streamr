@@ -1,6 +1,6 @@
 # Streamr
 
-Transform any folder in a web application.
+Serve the contents of any folder in a web application.
 
 ## Quickstart
 

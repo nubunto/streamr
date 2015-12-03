@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title></title>
+</head>
+<body>
+	<h1>{{.Title}}</h1>
+	
+Welcome to {{.Title}}!
+
+<p>You are {{.User}}</p>
+<p>You are serving files from {{.ServingDir}}.</p>
+
+{{with .Files}}
+<h2>Files</h2>
+<ul>
+	{{range .}}
+	<li><a href="{{.}}">{{.}}</li>
+	{{end}}
+</ul>
+{{end}}
+</body>
+</html>

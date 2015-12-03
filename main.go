@@ -28,6 +28,7 @@ import (
 	"os/user"
 	"io"
 	"encoding/json"
+	"path/filepath"
 )
 
 
@@ -38,7 +39,7 @@ type config struct {
 
 func main() {
 	// get a router, with a default home handler
-	r := mux.NewRouter().StrictSlash(false)
+	r := mux.NewRouter()
 	r.HandleFunc("/", homeHandler)
 
 	// read the configuration from the file in the directory
@@ -51,10 +52,11 @@ func main() {
 	}
 
 	// find a file by name, on the /streamr/{id} URL
-	f := r.PathPrefix("/streamr/{id}").Subrouter()
+	f := r.PathPrefix("/streamr").Subrouter()
 
 	// inject to the stream handler function through a closure the configuration and the current user.
-	f.Methods("GET").HandlerFunc(streamHandler(conf, currentUser))
+	f.HandleFunc("/{id}", streamHandler(conf, currentUser))
+	f.HandleFunc("/", showFilesHandler(path.Join(currentUser.HomeDir, conf.LookupDir)))
 
 	// start negroni
 	n := negroni.Classic()
@@ -83,14 +85,28 @@ func streamHandler(conf config, current *user.User) http.HandlerFunc {
 		// extract the file name and look it up, on HomeDir/LookupDir/FileName.
 		vars := mux.Vars(r)
 		filePath := path.Join(current.HomeDir, conf.LookupDir, vars["id"])
-		if file, err := os.Open(filePath); err == nil {
-			// copy from file to http.ResponseWriter (efficient)
-			io.Copy(w, file)
-		} else {
+		file, err := os.Open(filePath)
+		if err != nil {
 			// the file most likely doesn't exists.
 			// TODO: handle better this kind of error.
 			http.Error(w, http.StatusText(404), 404)
 			fmt.Fprintf(w, err.Error())
+			return
+		}
+		// copy from file to http.ResponseWriter (efficient)
+		w.Header().Set("Content-Disposition", "attachment")
+		io.Copy(w, file)
+	})
+}
+
+func showFilesHandler(fullpath string) http.HandlerFunc {
+	return http.HandlerFunc(func (w http.ResponseWriter, r *http.Request) {
+		err := filepath.Walk(fullpath, func(path string, info os.FileInfo, err error) error {
+			fmt.Fprintf(w, "%s\n", path)
+			return nil
+		})
+		if err != nil {
+			fmt.Printf("[ERROR] %v", err)
 		}
 	})
 }
